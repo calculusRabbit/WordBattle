@@ -16,6 +16,8 @@ const io = new Server(server, {
     }
 });
 
+const gameSocket = require("./socket/gameSocket.js");
+
 
 app.use(cors());
 app.use(express.json());
@@ -31,6 +33,7 @@ async function startServer() {
     try {
         console.log('Loading GloVe embeddings...');
         await glove.loadGlove();
+        gameSocket(io);
         console.log('GloVe embeddings loaded successfully.');
 
         server.listen(PORT, () => {

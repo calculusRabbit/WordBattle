@@ -4,6 +4,7 @@ const readline = require('readline'); //to read the file line by line
 
 const wordToIdx = {};
 const vectors = [];
+let filteredWords = []
 let isLoaded = false;
 
 function loadGlove() {
@@ -25,6 +26,13 @@ function loadGlove() {
 
         rl.on('close', () => {
             isLoaded = true;
+
+            // filter once for target word generate
+            filteredWords = Object.keys(wordToIdx).filter(word =>
+                word.length >= 3 &&
+                /^[a-z]+$/.test(word)
+            )
+
             console.log(`Glove loaded successfully: ${vectors.length} words`);
             resolve();
         });
@@ -64,8 +72,19 @@ function getSimilarity(word1, word2) {
     return score;
 }
 
+
+function getRandomWord() {
+    if (filteredWords.length === 0) { 
+        return null;
+    }
+    const randomIndex = Math.floor(Math.random() * filteredWords.length);
+    return filteredWords[randomIndex];
+}
+
+
 module.exports = {
     loadGlove,
     getSimilarity,
-    isLoaded
+    isLoaded,
+    getRandomWord
 };
