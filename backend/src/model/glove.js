@@ -4,12 +4,34 @@ const readline = require('readline'); //to read the file line by line
 
 const wordToIdx = {};
 const vectors = [];
-let filteredWords = []
+let filteredWords = [];
 let isLoaded = false;
+
+
+function loadFilteredWords() {
+    return new Promise((resolve, reject) => {
+        const filePath = path.join(__dirname, 'words_filtered.txt');
+        const rl = readline.createInterface({
+            input: fs.createReadStream(filePath)
+        })
+
+        rl.on('line', (line) => {
+            const word = line.trim();
+            if (word) filteredWords.push(word)
+        })
+
+        rl.on('close', () => {
+            console.log(`Filtered words loaded: ${filteredWords.length} playable words`);
+            resolve();
+        })
+
+        rl.on('error', (err) => reject(err));
+    })
+}
 
 function loadGlove() {
     return new Promise((resolve, reject) => {
-        const filePath = path.join(__dirname, 'glove.6B.100d.txt');
+        const filePath = path.join(__dirname, 'wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt');
 
         const rl = readline.createInterface({
             input: fs.createReadStream(filePath)
@@ -26,13 +48,6 @@ function loadGlove() {
 
         rl.on('close', () => {
             isLoaded = true;
-
-            // filter once for target word generate
-            filteredWords = Object.keys(wordToIdx).filter(word =>
-                word.length >= 3 &&
-                /^[a-z]+$/.test(word)
-            )
-
             console.log(`Glove loaded successfully: ${vectors.length} words`);
             resolve();
         });
@@ -84,6 +99,7 @@ function getRandomWord() {
 
 module.exports = {
     loadGlove,
+    loadFilteredWords,
     getSimilarity,
     isLoaded,
     getRandomWord

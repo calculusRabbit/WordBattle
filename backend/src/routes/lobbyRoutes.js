@@ -1,35 +1,58 @@
 const express = require('express');
 const lobbyService = require("../services/lobbyService.js");
+const activeGames = require("../socket/gameState.js");
+const { getIO } = require("../socket/ioInstance.js");
 
 const router = express.Router();
 
 router.get('/', async (req, res) => {
-     try {
+    try {
         const lobbies = await lobbyService.getAllLobbies();
-        res.json(lobbies);
-     } 
-     catch (err) {
+        const enriched = lobbies.map(lobby => {
+            const game = activeGames.get(lobby.id);
+            let currentPlayers;
+
+            if (game && game.players) {
+                currentPlayers = game.players.length;
+            } else {
+                currentPlayers = 0;
+            }
+
+            return {
+                id: lobby.id,
+                status: lobby.status,
+                max_players: lobby.max_players,
+                created_at: lobby.created_at,
+                currentPlayers
+            };
+        });
+        res.json(enriched);
+    }
+    catch (err) {
         res.status(500).json({ error: 'Failed to retrieve lobbies' });
-     }
+    }
 })
 
 
 router.post('/', async (req, res) => {
 
-    if (!req.body.maxPlayers || !req.body.maxRounds) {  // check first
-        return res.status(400).json({ error: 'maxPlayers and maxRounds are required' });
+    if (!req.body.maxPlayers) {
+        return res.status(400).json({ error: 'maxPlayers is required' });
     }
 
     const maxPlayers = req.body.maxPlayers;
-    const maxRounds = req.body.maxRounds;
 
-    if (maxPlayers < 2 || maxPlayers > 5 || maxRounds > 10 || maxRounds <= 0) {
-        return res.status(400).json({ error: 'Invalid maxPlayers or maxRounds value' });
+    if (maxPlayers < 2 || maxPlayers > 5) {
+        return res.status(400).json({ error: 'maxPlayers must be between 2 and 5' });
     }
 
 
     try {
-        const lobby = await lobbyService.createLobby(maxPlayers, maxRounds);
+        const lobby = await lobbyService.createLobby(maxPlayers);
+        const io = getIO();
+        if (io) {
+            io.emit('lobbiesUpdated');
+        }
         res.status(201).json(lobby)
     }
     catch (err) {

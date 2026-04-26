@@ -6,6 +6,8 @@ require('dotenv').config();
 
 const lobbyRoutes = require("./routes/lobbyRoutes.js");
 const glove = require("./model/glove.js");
+const gameSocket = require("./socket/gameSocket.js");
+const { setIO } = require("./socket/ioInstance.js");
 
 const app = express();
 const server = http.createServer(app);
@@ -16,12 +18,11 @@ const io = new Server(server, {
     }
 });
 
-const gameSocket = require("./socket/gameSocket.js");
 
 
 app.use(cors());
 app.use(express.json());
-app.use('/lobbies', lobbyRoutes);
+app.use('/api/lobbies', lobbyRoutes);
 
 app.get('/', (req, res) => {
     res.json({message: "WordDuel server is running!"})
@@ -33,6 +34,11 @@ async function startServer() {
     try {
         console.log('Loading GloVe embeddings...');
         await glove.loadGlove();
+
+        console.log('Loading filtered words...');
+        await glove.loadFilteredWords();
+
+        setIO(io);
         gameSocket(io);
         console.log('GloVe embeddings loaded successfully.');
 

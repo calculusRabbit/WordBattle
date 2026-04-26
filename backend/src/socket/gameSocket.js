@@ -1,16 +1,115 @@
 const lobbyService = require("../services/lobbyService.js");
 const glove = require("../model/glove.js");
+const activeGames = require("./gameState.js");
 
 module.exports = function(io) {
-    const activeGames = new Map(); // lobbyId -> game state
+
+    async function endRound(lobbyId) {
+        const game = activeGames.get(lobbyId);
+        if (!game) return;
+
+        // 1. cancel timer if still running
+        if (game.timerId) {
+            clearTimeout(game.timerId);
+            game.timerId = null;
+        }
+
+        // 2. calculate score
+        const roundResults = []
+        for (let i = 0; i < game.players.length; i++) {
+            const thisPlayer = game.players[i];
+
+            const playerAnswer = game.answers[thisPlayer.socketId] || '';
+            const similarity = glove.getSimilarity(playerAnswer, game.currentWord);
+            const points = similarity ? Math.round(similarity * 100) : 0;
+
+            thisPlayer.score += points;
+
+            roundResults.push({
+                username: thisPlayer.username,
+                answer: playerAnswer,
+                points,
+                totalScore: thisPlayer.score
+            });
+        }
+
+        io.to(`lobby_${lobbyId}`).emit('roundResult', {
+            word: game.currentWord,
+            results: roundResults,
+            round: game.round
+        })
+
+        game.timerId = setTimeout(async () => {
+            if (game.round >= 5) {
+                await endGame(lobbyId, roundResults)
+            } else {
+                startNextRound(lobbyId)
+            }
+        }, 8000)
+
+    }
+
+    async function endGame(lobbyId, roundResults) {
+        const game = activeGames.get(lobbyId);
+        if (!game) return;
+        game.status = 'waiting';
+        await lobbyService.updateLobbyStatus(lobbyId, 'waiting');
+        game.readyPlayers.clear();
+
+        if (game.timerId) {
+            clearTimeout(game.timerId);
+            game.timerId = null;
+        }
+
+        io.to(`lobby_${lobbyId}`).emit('gameEnd', {
+            results: roundResults,
+            players: game.players
+        })
+
+        io.emit('lobbiesUpdated');
+
+        game.players.forEach(p => p.score = 0);
+    }
+
+    function startNextRound(lobbyId) {
+        const game = activeGames.get(lobbyId);
+        if (!game) return;
+        game.round += 1;
+        game.currentWord = glove.getRandomWord();
+        game.answers = {};
+
+        io.to(`lobby_${lobbyId}`).emit('nextRound', {
+            word: game.currentWord,
+            round: game.round,
+            totalRounds: 5
+        })
+
+        startRoundTimer(lobbyId);
+    }
+
+    function startRoundTimer(lobbyId) {
+        const game = activeGames.get(lobbyId);
+        if (!game) return;
+
+        game.timerId = setTimeout(async () => {
+            const game = activeGames.get(lobbyId);
+            if (!game || game.status !== 'playing') return;
+
+            // force empty answer
+            game.players.forEach(p => {
+                if (game.answers[p.socketId] === undefined) {
+                    game.answers[p.socketId] = '';
+                }
+            })
+
+            await endRound(lobbyId);
+        }, 30000)
+
+    }
 
 
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
-
-        socket.on('disconnect', () => {
-            console.log(`Player disconnected: ${socket.id}`);
-        });
 
         socket.on('joinLobby', async (data) => {
             const { lobbyId, username } = data;
@@ -38,7 +137,8 @@ module.exports = function(io) {
                         readyPlayers: new Set(),
                         currentWord: null,
                         round: 0,
-                        answers: {}
+                        answers: {},
+                        timerId: null
                     });
                 }
 
@@ -49,6 +149,13 @@ module.exports = function(io) {
                     socket.emit('error', {message: 'Lobby is full'});
                     return;
                 }
+
+                // duplicate check
+                const alreadyJoined = game.players.some(p => p.socketId === socket.id);
+                if (alreadyJoined) {
+                    return;
+                }
+
 
                 // 5. add player to game state
                 game.players.push({
@@ -101,6 +208,7 @@ module.exports = function(io) {
                 if (allReady && enoughPlayers) {
                     // 4. update DB status to playing
                     await lobbyService.updateLobbyStatus(lobbyId, 'playing');
+                    io.emit('lobbiesUpdated');
 
                     // 5. start first round
                     game.status = 'playing';
@@ -115,6 +223,8 @@ module.exports = function(io) {
                         round: game.round,
                         totalRounds: 5
                     })
+
+                    startRoundTimer(lobbyId);
 
                     console.log(`Game started in lobby ${lobbyId} - word: ${game.currentWord}`);
                 }
@@ -157,55 +267,7 @@ module.exports = function(io) {
                 )
 
                 if (allAnswered) {
-                    // calculate score for everyone
-                    const roundResults = [];
-                    for (let i = 0; i < game.players.length; i++) {
-                        const thisPlayer = game.players[i];
-
-                        const playerAnswer = game.answers[thisPlayer.socketId];
-                        const similarity = glove.getSimilarity(playerAnswer, game.currentWord);
-                        const points = similarity ? Math.round(similarity * 100) : 0
-
-                        thisPlayer.score += points;
-
-                        roundResults.push({
-                            username: thisPlayer.username,
-                            answer: playerAnswer,
-                            points,
-                            totalScore: thisPlayer.score
-                        })
-                    }
-
-                    // 6. emit roundResult to everyone
-                    io.to(`lobby_${lobbyId}`).emit('roundResult', {
-                        word: game.currentWord,
-                        results: roundResults,
-                        round: game.round
-                    })
-
-                    // 8. check if game is over
-                    if (game.round >= 5) {
-                        game.status = 'waiting';
-                        await lobbyService.updateLobbyStatus(lobbyId, 'waiting')
-                        game.readyPlayers.clear();
-
-                        io.to(`lobby_${lobbyId}`).emit('gameEnd', {
-                            results: roundResults,
-                            players: game.players
-                        })
-                    }
-                    else {
-                        // start next round
-                        game.round += 1;
-                        game.currentWord = glove.getRandomWord();
-                        game.answers = {};
-
-                        io.to(`lobby_${lobbyId}`).emit('nextRound', {
-                            word: game.currentWord,
-                            round: game.round,
-                            totalRounds: 5
-                        })
-                    }
+                    await endRound(lobbyId);
                 }
 
             }
@@ -227,10 +289,11 @@ module.exports = function(io) {
                     continue; // player not in this lobby
                 }
 
-                const disconnectedPlayer = game.Players[playerIndex];
+                const disconnectedPlayer = game.players[playerIndex];
 
                 // remove player from game state
                 game.players.splice(playerIndex, 1);
+                game.readyPlayers.delete(socket.id);
                 console.log(`${disconnectedPlayer.username} left lobby ${lobbyId}`);
 
                 // tell everyoone in lobby palyer left
@@ -241,19 +304,33 @@ module.exports = function(io) {
 
                 // if no player left then delete lobby
                 if (game.players.length === 0) {
+                    if (game.timerId) clearTimeout(game.timerId);
                     activeGames.delete(lobbyId);
                     lobbyService.deleteLobby(lobbyId);
                     console.log(`Lobby ${lobbyId} deleted - no players left`);
-                }
-                else {
-                    game.status = 'waiting'
-                    game.readyPlayers.clear()
-                    game.answers = {}
-                    lobbyService.updateLobbyStatus(lobbyId, 'waiting')
+                    io.emit('lobbiesUpdated');
                 }
 
                 break;
             }
+        })
+
+        socket.on('getLobbyState', (data) => {
+            const { lobbyId } = data;
+            const game = activeGames.get(lobbyId);
+
+            if (!game) {
+                socket.emit('error', { message: 'game not found' });
+                return;
+            }
+
+            socket.emit('gameState', {
+                players: game.players,
+                status: game.status,
+                readyCount: game.readyPlayers.size,
+                round: game.round,
+                currentWord: game.currentWord
+            })
         })
     });
 
@@ -263,7 +340,6 @@ module.exports = function(io) {
 // lobby = {
 //     id: 1,
 //     status: 'playing',
-//     max_rounds: 5,
 //     max_players: 2,
 //     created_at: '2026-04-11T03:00:00.000Z'
 // }
