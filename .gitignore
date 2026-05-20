@@ -1,2 +1,9 @@
 node_modules/
 .env
+
+# macOS
+.DS_Store
+
+# large model/data files
+backend/src/model/*.txt
+backend/src/model/*.py
