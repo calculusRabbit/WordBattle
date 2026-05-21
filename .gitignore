@@ -7,3 +7,5 @@ node_modules/
 # large model/data files
 backend/src/model/*.txt
 backend/src/model/*.py
+
+TODO.md
