@@ -31,7 +31,7 @@ function loadFilteredWords() {
 
 function loadGlove() {
     return new Promise((resolve, reject) => {
-        const filePath = path.join(__dirname, 'wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt');
+        const filePath = path.join(__dirname, 'glove.6B.100d.txt');
 
         const rl = readline.createInterface({
             input: fs.createReadStream(filePath)
