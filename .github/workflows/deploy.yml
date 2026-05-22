@@ -3,7 +3,7 @@ name: Build and Push Backend
 on:
   push:
     branches:
-      - test
+      - main
     paths:
       - 'backend/**'
 
