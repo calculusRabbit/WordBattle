@@ -1,4 +1,2 @@
 node_modules
 .env
-src/model/*.txt
-src/model/*.py

@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS lobbies (
+    id SERIAL PRIMARY KEY,
+    status VARCHAR(20) NOT NULL DEFAULT 'waiting',
+    max_rounds INTEGER NOT NULL DEFAULT 5,
+    max_players INTEGER NOT NULL DEFAULT 2,
+    created_at TIMESTAMP DEFAULT NOW()
+);
