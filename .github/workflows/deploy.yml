@@ -37,4 +37,4 @@ jobs:
           npm i -g @railway/cli
           railway redeploy --service wordduel-backend --yes
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
