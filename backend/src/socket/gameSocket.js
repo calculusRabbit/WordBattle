@@ -21,7 +21,7 @@ module.exports = function(io) {
 
             const playerAnswer = game.answers[thisPlayer.socketId] || '';
             const similarity = glove.getSimilarity(playerAnswer, game.currentWord);
-            const points = similarity ? Math.round(similarity * 100) : 0;
+            const points = similarity ? Math.max(0, Math.round(similarity * 100)) : 0;
 
             thisPlayer.score += points;
 
@@ -145,7 +145,7 @@ module.exports = function(io) {
                 const game = activeGames.get(lobbyId);
 
                 // 4. check if lobby is full
-                if (game.players.length >= lobby.max_players) {
+                if (game.players.length >= 16) {
                     socket.emit('error', {message: 'Lobby is full'});
                     return;
                 }

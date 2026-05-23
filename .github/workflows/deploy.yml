@@ -31,3 +31,10 @@ jobs:
           context: ./backend
           push: true
           tags: ghcr.io/calculusrabbit/wordduel-backend:latest
+
+      - name: Redeploy on Railway
+        run: |
+          npm i -g @railway/cli
+          railway redeploy --service wordduel-backend --yes
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

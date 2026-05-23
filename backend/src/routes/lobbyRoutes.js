@@ -42,7 +42,7 @@ router.post('/', async (req, res) => {
 
     const maxPlayers = req.body.maxPlayers;
 
-    if (maxPlayers < 2 || maxPlayers > 5) {
+    if (maxPlayers < 2 || maxPlayers > 16) {
         return res.status(400).json({ error: 'maxPlayers must be between 2 and 5' });
     }
 
